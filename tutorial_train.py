@@ -5,10 +5,11 @@ from torch.utils.data import DataLoader
 from tutorial_dataset import MyDataset
 from cldm.logger import ImageLogger
 from cldm.model import create_model, load_state_dict
+from wui import build_wui_dsets
 
 
 # Configs
-resume_path = './models/control_sd15_ini.ckpt'
+resume_path = './models/v1-5-pruned.ckpt'
 batch_size = 4
 logger_freq = 300
 learning_rate = 1e-5
@@ -25,10 +26,24 @@ model.only_mid_control = only_mid_control
 
 
 # Misc
-dataset = MyDataset()
-dataloader = DataLoader(dataset, num_workers=0, batch_size=batch_size, shuffle=True)
+dataloader = build_wui_dsets({
+            "split_file": "/content/balanced_7k.json",
+            "boxes_dir": "/content/webui-boxes/all_data",
+            "rawdata_screenshots_dir": "/content/ds_all",
+            "class_map_file": "/content/layout2im/class_map.json",
+            "max_boxes": 100,
+            "layout_length": 100,
+            "num_classes_for_layout_object": 82,
+            "mask_size_for_layout_object": 128,
+            "used_condition_types": [
+                "obj_class",
+                "obj_bbox"
+            ],
+            "image_size": 256
+        }, 16)
+# dataloader = DataLoader(dataset, num_workers=0, batch_size=batch_size, shuffle=True)
 logger = ImageLogger(batch_frequency=logger_freq)
-trainer = pl.Trainer(gpus=1, precision=32, callbacks=[logger])
+trainer = pl.Trainer(gpus=1, precision=16, callbacks=[logger])
 
 
 # Train!
