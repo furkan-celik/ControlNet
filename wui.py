@@ -117,7 +117,7 @@ class WebUIDataset(torch.utils.data.Dataset):
         device_name = "-".join(key_filename.split("-")[:-1])
 
         img_pil = Image.open(img_path).convert("RGB")
-        org_size = img_pil.size
+        org_size = img_pil.size # w, h
         img = self.img_transforms(img_pil)
         target = {}
         boxes = []
@@ -129,27 +129,31 @@ class WebUIDataset(torch.utils.data.Dataset):
         inds = list(range(len(key_dict["labels"])))
         random.shuffle(inds)
 
+        print(org_size)
+
         for i in inds:
             box = key_dict["contentBoxes"][i]
-            box[0] *= scale
-            box[1] *= scale
-            box[2] *= scale
-            box[3] *= scale
+            box[0] *= scale # w
+            box[1] *= scale # h
+            box[2] *= scale # w
+            box[3] *= scale # h
 
-            box[0] = min(max(0, box[0]), org_size[0]) / org_size[0]
-            box[1] = min(max(0, box[1]), org_size[1]) / org_size[1]
-            box[2] = min(max(0, box[2]), org_size[0]) / org_size[0]
-            box[3] = min(max(0, box[3]), org_size[1]) / org_size[1]
+            print(box)
+
+            box[0] = round(min(max(0, box[0]), org_size[0]) / (org_size[0] / self.image_size[0]))
+            box[1] = round(min(max(0, box[1]), org_size[1]) / (org_size[1] / self.image_size[1]))
+            box[2] = round(min(max(0, box[2]), org_size[0]) / (org_size[0] / self.image_size[0]))
+            box[3] = round(min(max(0, box[3]), org_size[1]) / (org_size[1] / self.image_size[1]))
 
             # box[0] *= self.image_size[0]
             # box[1] *= self.image_size[1]
             # box[2] *= self.image_size[0]
             # box[3] *= self.image_size[1]
 
-            h, w = img_pil.size[0], img_pil.size[1]
+            h, w = img.shape[1], img.shape[2]
 
-            mask = torch.zeros(1, h, w)
-            mask[:, round(box[0] * h):max(round(box[0] * h) + 1, round(box[2] * h)), round(box[1] * w):max(round(box[1] * w) + 1, round(box[3] * w))] = 1
+            mask = torch.zeros(1, w, h)
+            mask[:, box[1]:box[3], box[0]:box[2]] = 1
 
             # skip invalid boxes
             if box[0] < 0 or box[1] < 0 or box[2] < 0 or box[3] < 0:
@@ -181,12 +185,16 @@ class WebUIDataset(torch.utils.data.Dataset):
             return self.__getitem__(idx + 1)
 
         boxes = torch.tensor(boxes, dtype=torch.float)
+
+        masks = torch.concat(masks, dim=0)
         masks = torch.tensor(masks, dtype=torch.float)
+
+        print(masks.shape)
 
         labels = torch.tensor(labels, dtype=torch.long)
 
         target["obj_bbox"] = boxes if len(boxes.shape) == 2 else torch.zeros(0, 4)
-        target["obj_mask"] = masks if len(masks.shape) == 2 else torch.zeros(1, img_pil.size[0], img_pil.size[1])
+        target["obj_mask"] = masks if len(masks.shape) == 3 else torch.zeros(1, img.shape[1], img.shape[2])
         target["obj_class"] = labels
         target["obj_class_name"] = labelNames
         target["image_id"] = torch.tensor([idx])
@@ -219,12 +227,12 @@ class WebUIDataset(torch.utils.data.Dataset):
             mode="constant",
             value=0,
         )
-        target["obj_class"] = torch.nn.functional.pad(
-            [",".join(c) for c in target["obj_class"]],
-            (0, 0, 0, self.layout_length - len(target["obj_class"])),
-            mode="constant",
-            value=0,
-        )
+        # target["obj_class"] = torch.nn.functional.pad(
+        #     [",".join(c) for c in target["obj_class"]],
+        #     (0, 0, 0, self.layout_length - len(target["obj_class"])),
+        #     mode="constant",
+        #     value=0,
+        # )
         target["is_valid_obj"] = torch.nn.functional.pad(
             target["is_valid_obj"],
             (0, self.layout_length - len(target["is_valid_obj"])),
@@ -232,7 +240,7 @@ class WebUIDataset(torch.utils.data.Dataset):
             value=0,
         )
 
-        return dict(jpg=img, txt=", ".join(target["obj_class_name"]), hint=target["obj_mask"])  # return image and target dict
+        return dict(jpg=img.permute(1, 2, 0), txt=", ".join(target["obj_class_name"]), hint=target["obj_mask"].permute(1, 2, 0))  # return image and target dict
 
     # except Exception as e:
     #     print("failed", idx, str(e))
@@ -334,7 +342,7 @@ def build_wui_dsets(cfg, batch_size, mode="train"):
         'batch_size': batch_size,
         'num_workers': 8,
         'shuffle': True,
-        'collate_fn': wui_collate_fn_for_layout,
+        # 'collate_fn': wui_collate_fn_for_layout,
     }
     train_loader = DataLoader(dataset, **loader_kwargs)
 
