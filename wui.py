@@ -129,7 +129,6 @@ class WebUIDataset(torch.utils.data.Dataset):
         inds = list(range(len(key_dict["labels"])))
         random.shuffle(inds)
 
-        print(org_size)
 
         for i in inds:
             box = key_dict["contentBoxes"][i]
@@ -137,8 +136,6 @@ class WebUIDataset(torch.utils.data.Dataset):
             box[1] *= scale # h
             box[2] *= scale # w
             box[3] *= scale # h
-
-            print(box)
 
             box[0] = round(min(max(0, box[0]), org_size[0]) / (org_size[0] / self.image_size[0]))
             box[1] = round(min(max(0, box[1]), org_size[1]) / (org_size[1] / self.image_size[1]))
@@ -186,10 +183,9 @@ class WebUIDataset(torch.utils.data.Dataset):
 
         boxes = torch.tensor(boxes, dtype=torch.float)
 
-        masks = torch.concat(masks, dim=0)
+        if len(masks) > 0:
+            masks = torch.concat(masks, dim=0)
         masks = torch.tensor(masks, dtype=torch.float)
-
-        print(masks.shape)
 
         labels = torch.tensor(labels, dtype=torch.long)
 
