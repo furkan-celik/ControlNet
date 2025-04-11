@@ -5,9 +5,9 @@ import json
 
 # import orjson
 from torchvision import transforms
+from torchvision.utils import draw_bounding_boxes
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-
 
 import torch.nn.functional as F
 import glob
@@ -48,6 +48,8 @@ class WebUIDataset(torch.utils.data.Dataset):
         max_skip_boxes=100,
         image_size=(128, 128),
         layout_length=10,
+        cond_on_masks=True,
+        obj_sep=", ",
         **kwargs
     ):
         super(WebUIDataset, self).__init__()
@@ -89,6 +91,8 @@ class WebUIDataset(torch.utils.data.Dataset):
 
         self.image_size = (image_size, image_size)
         self.layout_length = layout_length
+        self.cond_on_masks = cond_on_masks
+        self.obj_sep = obj_sep
 
     def __len__(self):
         return len(self.keys)
@@ -161,7 +165,6 @@ class WebUIDataset(torch.utils.data.Dataset):
                 box[2] - box[0]
             ) <= self.min_area:  # get rid of really small elements
                 continue
-            box.append(len(boxes) + 1)
             boxes.append(box)
             masks.append(mask)
             label = key_dict["labels"][i]
@@ -182,6 +185,7 @@ class WebUIDataset(torch.utils.data.Dataset):
             return self.__getitem__(idx + 1)
 
         boxes = torch.tensor(boxes, dtype=torch.float)
+
 
         if len(masks) > 0:
             masks = torch.concat(masks, dim=0)
@@ -211,6 +215,13 @@ class WebUIDataset(torch.utils.data.Dataset):
             if not isinstance(target[k], int):
                 target[k] = target[k][: self.max_boxes]
 
+        bboxImg = self.img_transforms(draw_bounding_boxes(
+            torch.ones_like(img, dtype=torch.uint8) * 255,
+            target["obj_bbox"],
+            font_size=24,
+        ))
+        target["bboxImg"] = bboxImg
+
         target["obj_bbox"] = torch.nn.functional.pad(
             target["obj_bbox"],
             (0, 0, 0, self.layout_length - len(target["obj_bbox"])),
@@ -236,7 +247,10 @@ class WebUIDataset(torch.utils.data.Dataset):
             value=0,
         )
 
-        return dict(jpg=img.permute(1, 2, 0), txt=", ".join(target["obj_class_name"]), hint=target["obj_mask"].permute(1, 2, 0))  # return image and target dict
+        if self.cond_on_masks:
+            return dict(jpg=img.permute(1, 2, 0), txt=self.obj_sep.join(target["obj_class_name"]), hint=target["obj_mask"].permute(1, 2, 0))  # return image and target dict
+        else:
+            return dict(jpg=img.permute(1, 2, 0), txt=self.obj_sep.join(target["obj_class_name"]), hint=target["bboxImg"].permute(1, 2, 0))  # return image and target dict
 
     # except Exception as e:
     #     print("failed", idx, str(e))
