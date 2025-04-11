@@ -215,11 +215,11 @@ class WebUIDataset(torch.utils.data.Dataset):
             if not isinstance(target[k], int):
                 target[k] = target[k][: self.max_boxes]
 
-        bboxImg = self.img_transforms(draw_bounding_boxes(
+        bboxImg = draw_bounding_boxes(
             torch.ones_like(img, dtype=torch.uint8) * 255,
             target["obj_bbox"],
             font_size=24,
-        ))
+        ) / 255
         target["bboxImg"] = bboxImg
 
         target["obj_bbox"] = torch.nn.functional.pad(
